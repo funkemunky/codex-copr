@@ -65,8 +65,10 @@ cd %{crate_dir}
 %if %{has_fedora_macros}
 %cargo_build
 %else
+%set_build_flags
 export CARGO_HOME=$PWD/.cargo-home
 mkdir -p "$CARGO_HOME"
+export RUSTFLAGS="%{?build_rustflags} -C debuginfo=2"
 cargo build --release
 %endif
 
@@ -93,7 +95,6 @@ install -Dpm 0644 _codex %{buildroot}%{zsh_completions_dir}/_codex
 
 %files
 %license LICENSE
-%doc README.md
 %doc codex-rs/README.md
 %{_bindir}/codex
 %{bash_completions_dir}/codex
