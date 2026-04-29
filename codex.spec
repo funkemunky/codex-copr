@@ -1,5 +1,4 @@
 %global up_version %{?up_version}%{!?up_version:0}
-%global package_arch %{?package_arch}%{!?package_arch:x86_64}
 %global debug_package %{nil}
 %global _build_id_links none
 %{!?bash_completions_dir:%global bash_completions_dir %{_datadir}/bash-completion/completions}
@@ -13,7 +12,8 @@ Summary:        OpenAI Codex command-line interface
 
 License:        Apache-2.0
 URL:            https://github.com/openai/codex
-Source0:        %{name}-%{version}-%{package_arch}-unknown-linux-musl.tar.gz
+Source0:        %{name}-%{version}-x86_64-unknown-linux-musl.tar.gz
+Source1:        %{name}-%{version}-aarch64-unknown-linux-musl.tar.gz
 
 ExclusiveArch:  x86_64 aarch64
 Requires:       git
@@ -22,7 +22,13 @@ Requires:       git
 OpenAI Codex is a coding assistant that runs in your terminal.
 
 %prep
-%autosetup -n %{name}-%{version}
+%setup -q -c -T
+%ifarch x86_64
+tar -xzf %{SOURCE0} --strip-components=1
+%endif
+%ifarch aarch64
+tar -xzf %{SOURCE1} --strip-components=1
+%endif
 
 %build
 
