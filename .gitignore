@@ -1,4 +1,4 @@
 *.tar.gz
-Makefile
 *.rpm
 results*/
+.rpmbuild/
