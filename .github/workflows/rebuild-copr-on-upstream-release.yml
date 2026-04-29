@@ -91,9 +91,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ -z "${COPR_WEBHOOK_URL}" ]]; then
+          webhook_url="$(printf '%s' "${COPR_WEBHOOK_URL}" | tr -d '\r\n')"
+          webhook_url="$(sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' <<<"${webhook_url}")"
+
+          if [[ -z "${webhook_url}" ]]; then
             echo "Missing COPR_CODEX_WEBHOOK_URL secret." >&2
             echo "Set it to the package-specific COPR custom webhook URL ending in /codex/." >&2
+            exit 1
+          fi
+
+          if [[ ! "${webhook_url}" =~ ^https://[^[:space:]]+$ ]]; then
+            echo "COPR_CODEX_WEBHOOK_URL is not a valid URL after trimming whitespace." >&2
+            echo "Expected format: https://copr.fedorainfracloud.org/webhooks/custom/.../codex/" >&2
             exit 1
           fi
 
@@ -116,7 +125,7 @@ jobs:
             -X POST \
             -H "Content-Type: application/json" \
             --data "${payload}" \
-            "${COPR_WEBHOOK_URL}"
+            "${webhook_url}"
 
       - name: Record processed upstream tag
         if: steps.decision.outputs.rebuild == 'true'
