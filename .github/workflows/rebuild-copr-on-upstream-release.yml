@@ -1,0 +1,139 @@
+name: Rebuild COPR on upstream Codex release
+
+on:
+  schedule:
+    - cron: "15 0 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Trigger the COPR webhook even if the upstream tag is unchanged"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rebuild-copr-on-upstream-release
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    name: Trigger COPR rebuild
+    runs-on: ubuntu-latest
+    env:
+      UPSTREAM_REPO: openai/codex
+      STATE_FILE: .github/upstream-codex-release.txt
+      FORCE_REBUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.force }}
+
+    steps:
+      - name: Check out packaging repository
+        uses: actions/checkout@v4
+
+      - name: Resolve latest upstream release
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          release_json="$(
+            curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${UPSTREAM_REPO}/releases/latest"
+          )"
+
+          latest_tag="$(jq -r '.tag_name // empty' <<<"${release_json}")"
+          release_url="$(jq -r '.html_url // empty' <<<"${release_json}")"
+          is_draft="$(jq -r '.draft // false' <<<"${release_json}")"
+
+          if [[ -z "${latest_tag}" ]]; then
+            echo "Could not determine latest upstream release tag." >&2
+            exit 1
+          fi
+
+          if [[ "${is_draft}" == "true" ]]; then
+            echo "Latest upstream release ${latest_tag} is still a draft." >&2
+            exit 1
+          fi
+
+          echo "latest_tag=${latest_tag}" >> "${GITHUB_OUTPUT}"
+          echo "release_url=${release_url}" >> "${GITHUB_OUTPUT}"
+
+      - name: Decide whether rebuild is needed
+        id: decision
+        run: |
+          set -euo pipefail
+
+          latest_tag="${{ steps.upstream.outputs.latest_tag }}"
+          previous_tag=""
+          if [[ -f "${STATE_FILE}" ]]; then
+            previous_tag="$(tr -d '[:space:]' < "${STATE_FILE}")"
+          fi
+
+          if [[ "${FORCE_REBUILD}" == "true" || "${latest_tag}" != "${previous_tag}" ]]; then
+            echo "rebuild=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "rebuild=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+          echo "previous_tag=${previous_tag}" >> "${GITHUB_OUTPUT}"
+          echo "Latest upstream tag: ${latest_tag}"
+          echo "Previously recorded tag: ${previous_tag:-<none>}"
+
+      - name: Trigger COPR package webhook
+        if: steps.decision.outputs.rebuild == 'true'
+        env:
+          COPR_WEBHOOK_URL: ${{ secrets.COPR_CODEX_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${COPR_WEBHOOK_URL}" ]]; then
+            echo "Missing COPR_CODEX_WEBHOOK_URL secret." >&2
+            echo "Set it to the package-specific COPR custom webhook URL ending in /codex/." >&2
+            exit 1
+          fi
+
+          payload="$(
+            jq -n \
+              --arg upstream_repository "${UPSTREAM_REPO}" \
+              --arg tag "${{ steps.upstream.outputs.latest_tag }}" \
+              --arg release_url "${{ steps.upstream.outputs.release_url }}" \
+              --arg package_name "codex" \
+              '{
+                object_kind: "release",
+                upstream_repository: $upstream_repository,
+                tag_name: $tag,
+                release_url: $release_url,
+                package_name: $package_name
+              }'
+          )"
+
+          curl -fsS \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data "${payload}" \
+            "${COPR_WEBHOOK_URL}"
+
+      - name: Record processed upstream tag
+        if: steps.decision.outputs.rebuild == 'true'
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$(dirname "${STATE_FILE}")"
+          printf '%s\n' "${{ steps.upstream.outputs.latest_tag }}" > "${STATE_FILE}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${STATE_FILE}"
+
+          if git diff --cached --quiet; then
+            echo "State file is already current."
+            exit 0
+          fi
+
+          git commit -m "Track upstream Codex ${{ steps.upstream.outputs.latest_tag }}"
+          git push
