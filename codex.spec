@@ -1,4 +1,5 @@
 %global up_version %{?up_version}%{!?up_version:0}
+%global package_arch %{?package_arch}%{!?package_arch:x86_64}
 %global debug_package %{nil}
 %global _build_id_links none
 %{!?bash_completions_dir:%global bash_completions_dir %{_datadir}/bash-completion/completions}
@@ -12,9 +13,9 @@ Summary:        OpenAI Codex command-line interface
 
 License:        Apache-2.0
 URL:            https://github.com/openai/codex
-Source0:        %{name}-%{version}-x86_64-unknown-linux-musl.tar.gz
+Source0:        %{name}-%{version}-%{package_arch}-unknown-linux-musl.tar.gz
 
-BuildArch:      x86_64
+ExclusiveArch:  x86_64 aarch64
 Requires:       git
 
 %description
