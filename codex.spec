@@ -12,8 +12,8 @@ Summary:        OpenAI Codex command-line interface
 
 License:        Apache-2.0
 URL:            https://github.com/openai/codex
-Source0:        %{name}-%{version}-x86_64-unknown-linux-musl.tar.gz
-Source1:        %{name}-%{version}-aarch64-unknown-linux-musl.tar.gz
+Source0:        %{name}-%{version}-x86_64-unknown-linux-gnu.tar.gz
+Source1:        %{name}-%{version}-aarch64-unknown-linux-gnu.tar.gz
 
 ExclusiveArch:  x86_64 aarch64
 Requires:       git
