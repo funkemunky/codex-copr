@@ -1,4 +1,5 @@
-%global up_version %{?up_version}%{!?up_version:0}
+{{{ fetch_sources }}}
+%global up_version {{{ get_version }}}
 %global debug_package %{nil}
 %global _build_id_links none
 %{!?bash_completions_dir:%global bash_completions_dir %{_datadir}/bash-completion/completions}

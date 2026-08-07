@@ -1,15 +1,15 @@
 TOPDIR ?= $(CURDIR)/.rpmbuild
+OUTDIR ?= $(TOPDIR)/SRPMS
 
 .PHONY: srpm srpm-x86_64 srpm-aarch64 clean
 
 srpm:
-	TOPDIR="$(TOPDIR)" ./make-srpm.sh
+	mkdir -p "$(OUTDIR)"
+	rpkg srpm --outdir "$(OUTDIR)"
 
-srpm-x86_64:
-	TOPDIR="$(TOPDIR)" ./make-srpm.sh
+srpm-x86_64: srpm
 
-srpm-aarch64:
-	TOPDIR="$(TOPDIR)" ./make-srpm.sh
+srpm-aarch64: srpm
 
 clean:
-	rm -rf "$(TOPDIR)"
+	rm -rf "$(TOPDIR)" *.tar.gz codex.spec

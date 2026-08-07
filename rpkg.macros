@@ -1,0 +1,54 @@
+function get_latest_tag {
+    local api_latest="https://api.github.com/repos/openai/codex/releases/latest"
+    local release_json
+    release_json="$(curl -fsSL --retry 3 --connect-timeout 30 "$api_latest" 2>/dev/null)"
+    local tag
+    tag="$(printf '%s\n' "$release_json" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+    if [ -z "$tag" ]; then
+        tag="rust-v0.146.1"
+    fi
+    echo "$tag"
+}
+
+function get_version {
+    local tag
+    tag="$(get_latest_tag)"
+    local version="${tag#rust-v}"
+    echo "$version"
+}
+
+function fetch_sources {
+    local tag
+    tag="$(get_latest_tag)"
+    local version="${tag#rust-v}"
+    local target_dir="${OUTDIR:-.}"
+    local work_dir
+    work_dir="$(mktemp -d)"
+
+    curl -fsSL --retry 3 -o "${work_dir}/LICENSE" "https://raw.githubusercontent.com/openai/codex/${tag}/LICENSE" >/dev/null 2>&1
+    curl -fsSL --retry 3 -o "${work_dir}/README.md" "https://raw.githubusercontent.com/openai/codex/${tag}/README.md" >/dev/null 2>&1
+
+    for arch in x86_64 aarch64; do
+        local asset_basename="codex-${arch}-unknown-linux-musl"
+        local latest_url="https://github.com/openai/codex/releases/latest/download/${asset_basename}.tar.gz"
+        local archive="${work_dir}/${asset_basename}.tar.gz"
+        local unpack_dir="${work_dir}/unpack-${arch}"
+        local source_tree="${work_dir}/codex-${version}-${arch}"
+
+        curl -fsSL --retry 3 -o "$archive" "$latest_url" >/dev/null 2>&1
+        mkdir -p "$unpack_dir"
+        tar -xzf "$archive" -C "$unpack_dir"
+
+        mkdir -p "$source_tree/codex-${version}"
+        install -pm 0755 "${unpack_dir}/${asset_basename}" "$source_tree/codex-${version}/codex"
+        install -pm 0644 "${work_dir}/LICENSE" "$source_tree/codex-${version}/LICENSE"
+        install -pm 0644 "${work_dir}/README.md" "$source_tree/codex-${version}/README.md"
+
+        tar -C "$source_tree" -czf "${target_dir}/codex-${version}-${arch}-unknown-linux-musl.tar.gz" "codex-${version}"
+        if [ "$target_dir" != "." ]; then
+            cp "${target_dir}/codex-${version}-${arch}-unknown-linux-musl.tar.gz" "./" 2>/dev/null || true
+        fi
+    done
+    rm -rf "$work_dir"
+}
+
